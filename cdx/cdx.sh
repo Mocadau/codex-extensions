@@ -16,8 +16,10 @@ _cdx__detect_plugin_dir() {
   if [[ -n "${BASH_SOURCE[0]}" ]]; then
     base=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   elif [[ -n "$ZSH_VERSION" ]]; then
-    local src="${(%):-%x}"
+    local src
+    src=$(eval 'print -r -- ${(%):-%N}' 2>/dev/null) || true
     if [[ -n "$src" ]]; then
+      [[ "$src" != /* ]] && src="$PWD/$src"
       base=$(cd "$(dirname "$src")" 2>/dev/null && pwd || true)
     fi
   fi
@@ -29,68 +31,14 @@ _cdx__detect_plugin_dir() {
   printf '%s' "$base/plugins"
 }
 
-_cdx_normalize_dir() {
-  local dir="${1-}"
-  [[ -n "$dir" ]] || return 1
-  if [[ -d "$dir" ]]; then
-    (cd "$dir" 2>/dev/null && pwd)
-    return $?
-  fi
-  return 1
-}
-
-_cdx_plugin_exists_in_dir() {
-  local dir="${1-}" name="${2-}" ext
-  [[ -d "$dir" && -n "$name" ]] || return 1
-  for ext in sh sg; do
-    if [[ -f "$dir/$name.$ext" || -f "$dir/codex-$name.$ext" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-_cdx_initialize_plugin_dir() {
-  local configured="${CODEX_PLUGIN_DIR:-}" default_dir="${_CDX_DEFAULT_PLUGIN_DIR}" normalized="" candidate="" chosen=""
-  if normalized=$(_cdx_normalize_dir "$configured" 2>/dev/null); then
-    candidate="$normalized"
-  fi
-  if [[ -z "$candidate" ]]; then
-    if normalized=$(_cdx_normalize_dir "$default_dir" 2>/dev/null); then
-      candidate="$normalized"
-    else
-      candidate="$default_dir"
-    fi
-  fi
-  chosen="$candidate"
-  if ! _cdx_plugin_exists_in_dir "$chosen" "update"; then
-    if normalized=$(_cdx_normalize_dir "$default_dir" 2>/dev/null) && _cdx_plugin_exists_in_dir "$normalized" "update"; then
-      if [[ -n "$configured" && "$configured" != "$normalized" && -z "${_CDX_PLUGIN_DIR_FALLBACK_WARNED:-}" ]]; then
-        printf 'cdx: warning: plugin directory "%s" missing built-in plugins; using "%s"\n' "$configured" "$normalized" >&2
-        _CDX_PLUGIN_DIR_FALLBACK_WARNED=1
-      fi
-      chosen="$normalized"
-    fi
-  fi
-  if normalized=$(_cdx_normalize_dir "$chosen" 2>/dev/null); then
-    CODEX_PLUGIN_DIR="$normalized"
-  else
-    CODEX_PLUGIN_DIR="$chosen"
-  fi
-}
-
-readonly _CDX_DEFAULT_PLUGIN_DIR="$(_cdx__detect_plugin_dir)"
-
 #########################################
 # Configuration (overridable via env)   #
 #########################################
 : "${CODEX_BIN:=codex}"
-: "${CDX_VERSION:=0.2.4}"
-: "${CDX_BUILD_DATE:=2025-10-04}"
-: "${CODEX_PLUGIN_DIR:=$_CDX_DEFAULT_PLUGIN_DIR}"
+: "${CDX_VERSION:=0.2.2}"
+: "${CDX_BUILD_DATE:=2025-09-16}"
+: "${CODEX_PLUGIN_DIR:=$(_cdx__detect_plugin_dir)}"
 : "${CDX_CHECK_UPDATES:=}"
-
-_cdx_initialize_plugin_dir
 
 # Opinionated defaults for pass-through invocations of `codex`.
 _CDX_DEFAULT_FLAGS=(
@@ -242,7 +190,6 @@ EOF
 # Command                               #
 #########################################
 cdx() {
-  _cdx_initialize_plugin_dir
   local codebin="${CODEX_BIN}"
   local plugin_dir="${CODEX_PLUGIN_DIR}"
 
